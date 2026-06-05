@@ -70,3 +70,10 @@ class ExpenseResponse(BaseModel):
     class Config:
         from_attributes=True
 
+
+class UserListResponse(BaseModel):
+    data: List[UserResponse]
+    
+
+class GroupListresponse(BaseModel):
+    data: List[GroupResponse]

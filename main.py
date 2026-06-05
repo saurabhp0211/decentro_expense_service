@@ -5,8 +5,10 @@ from sqlalchemy.orm import Session
 
 import models
 import schemas
-from database import SessionLocal
+from database import SessionLocal, engine
 
+
+models.Base.metadata.create_all(bind=engine)
 
 # to initialize the application
 app=FastAPI(title="Decentro Expense Sharing API")
@@ -38,7 +40,7 @@ def health_check():
 
 # user endpoints -->
 
-@app.post("/users/", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/users/", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED,tags=["Users"])
 def create_user(user:schemas.UserCreate, db:Session=Depends(get_db)):
     """This will create a new user in the database."""
     db_user=models.User(name=user.name, email=user.email, mobile_number=user.mobile_number)
@@ -49,14 +51,15 @@ def create_user(user:schemas.UserCreate, db:Session=Depends(get_db)):
 
 
 # list all users
-@app.get("/users/")
+@app.get("/users/", response_model=schemas.UserListResponse, tags=["Users"])
 def get_users(db: Session = Depends(get_db)):
-    return db.query(models.User).all()
+    users=db.query(models.User).all()
+    return {"data":users}
 
 
 
 # group endpoints --->
-@app.post("/groups/", response_model=schemas.GroupResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/groups/", response_model=schemas.GroupResponse, status_code=status.HTTP_201_CREATED, tags=["Groups"])
 def create_group(group: schemas.GroupCreate, db:Session=Depends(get_db)):
     """Creates a new expense sharing group"""
     db_group=models.Group(name=group.name, description=group.description)
@@ -66,7 +69,7 @@ def create_group(group: schemas.GroupCreate, db:Session=Depends(get_db)):
     return db_group
 
 
-@app.post("/groups/{group_id}/members")
+@app.post("/groups/{group_id}/members",tags=["Groups"])
 def add_user_To_group(group_id: int, member: schemas.GroupMemberAdd, db: Session = Depends(get_db)):
     """Adds a user to an existing group"""
 
@@ -87,7 +90,7 @@ def add_user_To_group(group_id: int, member: schemas.GroupMemberAdd, db: Session
     return {"message": f"User '{user.name}' successfully added to group '{group.name}'"}
 
 
-@app.get("/groups/{group_id}/members")
+@app.get("/groups/{group_id}/members",tags=["Groups"])
 def get_group_Members(group_id: int, db: Session = Depends(get_db)):
     """Returns all members belonging to a group"""
     group = db.query(models.Group).filter(models.Group.id == group_id).first()
@@ -96,9 +99,15 @@ def get_group_Members(group_id: int, db: Session = Depends(get_db)):
     return group.members
 
 
+@app.get("/groups/", response_model=schemas.GroupListresponse,tags=["Groups"])
+def get_groups(db:Session=Depends(get_db)):
+    groups=db.query(models.Group).all()
+    return {"data":groups}
+
+
 
 # expense endpoints --
-@app.post("/expenses/", response_model=schemas.ExpenseResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/expenses/", response_model=schemas.ExpenseResponse, status_code=status.HTTP_201_CREATED,tags=["Expenses"])
 def create_expense(expense:schemas.ExpenseCreate, db:Session=Depends(get_db)):
 
     # logic for validation 
@@ -151,7 +160,7 @@ def create_expense(expense:schemas.ExpenseCreate, db:Session=Depends(get_db)):
     db.refresh(db_expense)
     return db_expense
 
-@app.get("/groups/{group_id}/expenses")
+@app.get("/groups/{group_id}/expenses",tags=["Expenses"])
 def get_Group_Expenses(group_id: int, db: Session = Depends(get_db)):
     expenses = db.query(models.Expense).filter(models.Expense.group_id == group_id).all()
     return expenses
@@ -159,7 +168,7 @@ def get_Group_Expenses(group_id: int, db: Session = Depends(get_db)):
 
 # balances endpoint
 
-@app.get("/balances/")
+@app.get("/balances/",tags=["Balances"])
 def get_all_balances(db:Session=Depends(get_db)):
     expenses=db.query(models.Expense).all()
 
