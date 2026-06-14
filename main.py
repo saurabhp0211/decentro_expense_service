@@ -115,13 +115,57 @@ def create_expense(expense:schemas.ExpenseCreate, db:Session=Depends(get_db)):
     if expense.amount <= 0:
         raise HTTPException(status_code=400, detail="Expense amount must be greater than 0")
     
-    if expense.split_type==schemas.SplitType.EXACT:
-        total_split=sum(split.amount for split in expense.splits if split.amount is not None)
+    group=db.query(models.Group).filter(models.Group.id==expense.group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    # verifying if all users belong to the group ---
+    group_member_ids= {member.id for member in group.members}
+
+    if expense.payer_id not in group_member_ids:
+        raise HTTPException(status_code=400, detail="The payer must be a member of the group")
+
+
+    if expense.split_type==schemas.SplitType.EQUAL:
+        member_count=len(group.members)
+        if member_count==0:
+            raise HTTPException(status_code=400, detail="Cannot add expense to a group with no members")
+
+        owed_amount= expense.amount/ member_count
+        expense.splits= [
+            schemas.SplitInput(user_id=member.id, amount=owed_amount)
+
+            for member in group.members
+        ]
+# validation of exact splits ------
+    elif expense.split_type==schemas.SplitType.EXACT:
+        total_split=0.0
+        for split in expense.splits:
+            if split.user_id not in group_member_ids:
+                raise HTTPException(status_code=400, detail=f"User {split.user_id} is not in the group")
+            
+            if split.amount is None:
+                raise HTTPException(status_code=400, detail="Amount is required for EXACT splits")
+            
+            total_split+=split.amount
+
         if total_split!=expense.amount:
             raise HTTPException(status_code=400, detail=f"EXACT splits sum({total_split}) must equal total amount ({expense.amount})")
         
-    if expense.split_type==schemas.SplitType.PERCENT:
-        total_percent=sum(split.percent for split in expense.splits if split.percent is not None)
+
+        # validating percent splits
+    elif expense.split_type==schemas.SplitType.PERCENT:
+        total_percent=0.0
+
+        for split in expense.splits:
+            if split.user_id not in group_member_ids:
+                raise HTTPException(status_code=400, detail=f"User{split.user_id} is not present in the group")
+            
+            if split.percent is None:
+                raise HTTPException(status_code=400, detail="Percent is required for PERCENT splits")
+
+            total_percent+=split.percent
+
         if total_percent !=100.0:
             raise HTTPException(status_code=400, detail=f"PERCENT splits must sum exactly to 100. Current sum: {total_percent}")
         
@@ -142,7 +186,7 @@ def create_expense(expense:schemas.ExpenseCreate, db:Session=Depends(get_db)):
         owed_amount=0.0
 
         if expense.split_type== schemas.SplitType.EQUAL:
-            owed_amount= expense.amount/ len(expense.splits)
+            owed_amount= split.amount
 
         elif expense.split_type==schemas.SplitType.EXACT:
             owed_amount=split.amount
