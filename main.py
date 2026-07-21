@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, status, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from utils import simplify_debts
 
 import models
 import schemas
@@ -112,6 +113,9 @@ def create_expense(expense:schemas.ExpenseCreate, db:Session=Depends(get_db)):
 
     # logic for validation 
 
+    if not expense.splits:
+        raise HTTPException(status_code=400, detail="The 'splits' array cannot be empty.")
+
     if expense.amount <= 0:
         raise HTTPException(status_code=400, detail="Expense amount must be greater than 0")
     
@@ -127,16 +131,14 @@ def create_expense(expense:schemas.ExpenseCreate, db:Session=Depends(get_db)):
 
 
     if expense.split_type==schemas.SplitType.EQUAL:
-        member_count=len(group.members)
-        if member_count==0:
-            raise HTTPException(status_code=400, detail="Cannot add expense to a group with no members")
-
-        owed_amount= expense.amount/ member_count
-        expense.splits= [
-            schemas.SplitInput(user_id=member.id, amount=owed_amount)
-
-            for member in group.members
-        ]
+        split_count=len(expense.splits)
+        owed_amount=expense.amount/split_count
+        
+        for split in expense.splits:
+            if split.user_id not in group_member_ids:
+                raise HTTPException(status_code=400, detail=f"User {split.user_id} is not in the group")
+            
+            split.amount= owed_amount
 # validation of exact splits ------
     elif expense.split_type==schemas.SplitType.EXACT:
         total_split=0.0
@@ -212,53 +214,39 @@ def get_Group_Expenses(group_id: int, db: Session = Depends(get_db)):
 
 # balances endpoint
 
-@app.get("/balances/",tags=["Balances"])
-def get_all_balances(db:Session=Depends(get_db)):
-    expenses=db.query(models.Expense).all()
+@app.get("/groups/{group_id}/balances", tags=["Balances"])
+def get_group_balances(group_id:int, db:Session=Depends(get_db)):
 
-# We will track who owes whom in this dict
-    debts={}
+    group=db.query(models.Group).filter(models.Group.id==group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    
+    expenses=db.query(models.Expense).filter(models.Expense.group_id==group_id).all()
+
+    raw_transactions=[]
+    involved_user_ids=set()
 
     for expense in expenses:
-        payer_id= expense.payer_id
-
         for split in expense.splits:
-            borrower_id=split.user_id
+            if split.user_id !=expense.payer_id:
+                raw_transactions.append({
+                    "borrower_id":split.user_id,
+                    "payer_id":expense.payer_id,
+                    "amount":split.amount_owed
+                })
+                involved_user_ids.add(split.user_id)
+                involved_user_ids.add(expense.payer_id)
+    
 
-            # skipping because payer cant be borrower
-            if payer_id==borrower_id:
-                continue
-
-            debt_key=(borrower_id, payer_id)
-
-            if debt_key not in debts:
-                debts[debt_key]=0.0
-            debts[debt_key]+=split.amount_owed
-
-    involved_user_ids=set()
-    for borrower, payer in debts.keys():
-        involved_user_ids.add(borrower)
-        involved_user_ids.add(payer)
+    # We only fetch users who are actually involved in debts in this group
+    if not involved_user_ids:
+        return {"overall_balances": []}
     
     users=db.query(models.User).filter(models.User.id.in_(involved_user_ids)).all()
+    user_names= {user.id: user.name for user in users}
 
-    user_names={user.id:user.name for user in users}
+    # passing through the simplification algo
+    final_balances=simplify_debts(raw_transactions,user_names)
 
-
-    # formatting display for better coherence and readability
-
-    final_balances=[]
-    for (borrower,payer), amount in debts.items():
-        if amount>0:
-            borrower_name=user_names.get(borrower, f"Unknown User {borrower}")
-            payer_name= user_names.get(payer, f"Unknown User {payer}")
-
-            final_balances.append({
-                "borrower_id":borrower,
-                "payer_id":payer,
-                "amount":round(amount,2),
-                "message": f"{borrower_name} owes {payer_name} Rs{round(amount,2)}"
-            })
-    return {"overall_balances":final_balances}
-
+    return {"overall_balances": final_balances}
 
