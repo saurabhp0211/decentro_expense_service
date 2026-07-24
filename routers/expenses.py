@@ -4,6 +4,7 @@ import models
 import schemas
 from database import get_db
 from utils import simplify_debts
+from fastapi import Query
 
 router=APIRouter()
 
@@ -84,8 +85,16 @@ def create_expense(expense: schemas.ExpenseCreate, db: Session = Depends(get_db)
     return db_expense
 
 @router.get("/groups/{group_id}/expenses", tags=["Expenses"])
-def get_Group_Expenses(group_id: int, db: Session = Depends(get_db)):
-    expenses = db.query(models.Expense).filter(models.Expense.group_id == group_id).all()
+def get_Group_Expenses(group_id: int, 
+                       skip:int =Query(0, ge=0, description="Records to skip"),
+                       limit: int = Query(20, le=100, description="Max records to return"),
+                       db: Session = Depends(get_db)):
+    
+    expenses = (db.query(models.Expense)
+               .filter(models.Expense.group_id == group_id)
+               .offset(skip)
+               .limit(limit)
+               .all())
     return expenses
 
 
@@ -119,3 +128,16 @@ def get_group_balances(group_id: int, db: Session = Depends(get_db)):
 
     final_balances = simplify_debts(raw_transactions, user_names)
     return {"overall_balances": final_balances}
+
+
+@router.delete("/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Expenses"])
+def delete_expense(expense_id: int, db:Session=Depends(get_db)):
+    """Deletes an expense and automatically removes all associated splits."""
+    expense=db.query(models.Expense).filter(models.Expense.id==expense_id).first()
+
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+
+    db.delete(expense)
+    db.commit()
+    return 

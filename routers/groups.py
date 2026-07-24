@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status, Depends, HTTPException
+from fastapi import APIRouter, status, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 import models
 import schemas
@@ -48,6 +48,10 @@ def get_group_members(group_id:int, db:Session=Depends(get_db)):
 
 
 @router.get("/", response_model=schemas.GroupListresponse)
-def get_groups(db: Session = Depends(get_db)):
-    groups = db.query(models.Group).all()
+def get_groups(
+    skip: int = Query(0, ge=0, description="Records to skip"),
+    limit: int =Query(20, le=100, description="Max records to return"),
+    db: Session = Depends(get_db)):
+
+    groups = db.query(models.Group).offset(skip).limit(limit).all()
     return {"data": groups}
