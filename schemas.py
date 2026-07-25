@@ -10,6 +10,7 @@ class UserCreate(BaseModel):
     name:str
     email:EmailStr
     mobile_number:str
+    password:str
 
 class UserResponse(BaseModel):
     id:int

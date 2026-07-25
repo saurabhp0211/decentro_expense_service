@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 from database import get_db
-from auth import hash_password
+from oauth2 import hash_password
 
 router= APIRouter(
     prefix="/users",

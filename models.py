@@ -20,6 +20,7 @@ class User(Base):
     email= Column(String, unique=True, index=True, nullable=False)
     mobile_number=Column(String, unique=True, index=True, nullable=False)
     created_at=Column(DateTime(timezone=True), server_default=func.now())
+    password=Column(String)
 
     groups=relationship("Group",secondary=group_members, back_populates="members")  
     expenses_paid= relationship("Expense", back_populates="payer")     #one to many

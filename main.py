@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 
 import models
 from database import engine
-from routers import users, groups, expenses
+from routers import users, groups, expenses, auth
 
 
 models.Base.metadata.create_all(bind=engine)
@@ -34,5 +34,6 @@ def health_check():
 app.include_router(users.router)
 app.include_router(groups.router)
 app.include_router(expenses.router)
+app.include_router(auth.router)
 
 
