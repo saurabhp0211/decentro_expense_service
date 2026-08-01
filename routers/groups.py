@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 from database import get_db
+from oauth2 import get_current_user
+
 
 router=APIRouter(
     prefix="/groups",
@@ -10,7 +12,9 @@ router=APIRouter(
 )
 
 @router.post("/", response_model=schemas.GroupResponse, status_code=status.HTTP_201_CREATED)
-def create_group(group: schemas.GroupCreate, db:Session=Depends(get_db)):
+def create_group(group: schemas.GroupCreate, 
+                 db:Session=Depends(get_db),
+                 current_user: models.User= Depends(get_current_user)):
     """Creates a new expense sharing group"""
     db_group = models.Group(name=group.name, description=group.description)
     db.add(db_group)

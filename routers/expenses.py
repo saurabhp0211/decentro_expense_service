@@ -51,7 +51,7 @@ def create_expense(expense: schemas.ExpenseCreate, db: Session = Depends(get_db)
             if split.percent is None:
                 raise HTTPException(status_code=400, detail="Percent is required for PERCENT splits")
             total_percent += split.percent
-        if total_percent != 100.0:
+        if abs(total_percent- 100.0)> 0.01:
             raise HTTPException(status_code=400, detail=f"PERCENT splits must sum exactly to 100. Current sum: {total_percent}")
         
     db_expense = models.Expense(
