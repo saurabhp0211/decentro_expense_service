@@ -63,7 +63,8 @@ class ExpenseCreate(BaseModel):
 class ExpenseResponse(BaseModel):
     id:int
     group_id:int
-    payer_id:int
+    payer_id: int
+    created_by_id: int
     amount:float
     description:str
     split_type:SplitType

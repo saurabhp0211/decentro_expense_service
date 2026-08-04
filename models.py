@@ -44,13 +44,19 @@ class Expense(Base):
     id=Column(Integer, primary_key=True, index=True)
     group_id= Column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False)
     payer_id=Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),nullable=False)
+
+    created_by_id= Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     amount=Column(Float, nullable=False)
     description=Column(String, nullable=False)
     split_type=Column(String, nullable=False)
     created_at= Column(DateTime(timezone=True), server_default=func.now())
 
     group = relationship("Group", back_populates="expenses")
-    payer=relationship("User", back_populates="expenses_paid")
+    payer=relationship("User", foreign_keys=[payer_id],back_populates="expenses_paid")
+
+    
+    # Relationship for audit trail
+    creator=relationship("User", foreign_keys=[created_by_id])
     splits=relationship("ExpenseSplit", back_populates="expense", cascade="all, delete-orphan")
 
 

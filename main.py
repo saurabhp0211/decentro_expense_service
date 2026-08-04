@@ -7,7 +7,7 @@ from database import engine
 from routers import users, groups, expenses, auth
 
 
-models.Base.metadata.create_all(bind=engine)
+# models.Base.metadata.create_all(bind=engine)
 
 # to initialize the application
 app=FastAPI(title="Decentro Expense Sharing API")
