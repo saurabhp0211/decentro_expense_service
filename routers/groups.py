@@ -24,6 +24,7 @@ def create_group(group: schemas.GroupCreate,
                  current_user: CurrentUser):
     """Creates a new expense sharing group"""
     db_group = models.Group(name=group.name, description=group.description)
+    db_group.members.append(current_user)
     db.add(db_group)
     db.commit()
     db.refresh(db_group)

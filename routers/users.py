@@ -3,12 +3,16 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 from database import get_db
-from oauth2 import hash_password
+from oauth2 import hash_password, get_current_user
+from typing import Annotated
 
 router= APIRouter(
     prefix="/users",
     tags=["Users"]
 )
+
+Current_User=Annotated[models.User, Depends(get_current_user)]
+
 
 @router.post("/", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(user: schemas.UserCreate, db:Session = Depends(get_db)):
@@ -34,13 +38,10 @@ def create_user(user: schemas.UserCreate, db:Session = Depends(get_db)):
     db.refresh(db_user)
     return db_user
 
-@router.get("/", response_model=schemas.UserListResponse)
-def get_users(
-    skip: int= Query(0, ge=0, description="Records to skip"),
-    limit: int= Query(20, le=100, description="Max records to return"),
-    db:Session = Depends(get_db)):
+@router.get("/me", response_model=schemas.UserResponse)
+def get_current_user_profile(current_user: Current_User):
+    """Returns the profile of the currently authenticated user.
+       No database session required here because the authentication dependency already fetched the user. """
 
-
-    users = db.query(models.User).offset(skip).limit(limit).all()
-    return {"data": users}
+    return current_user
 

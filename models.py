@@ -23,7 +23,9 @@ class User(Base):
     password=Column(String)
 
     groups=relationship("Group",secondary=group_members, back_populates="members")  
-    expenses_paid= relationship("Expense", back_populates="payer")     #one to many
+    expenses_paid= relationship("Expense", foreign_keys="Expense.payer_id",back_populates="payer")     #one to many
+
+    expenses_created=relationship("Expense", foreign_keys="Expense.created_by_id", back_populates="creator")
 
 class Group(Base):
     __tablename__="groups"
