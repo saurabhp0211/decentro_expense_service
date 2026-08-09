@@ -162,7 +162,6 @@ def delete_expense(expense_id: int, db:DbSession, current_user: CurrentUser):
     expense=db.query(models.Expense).filter(models.Expense.id==expense_id).first()
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
-
     
     # SECURITY 
     # Only the person who logged the expense or the person who paid it is allowed to delete it. 
