@@ -1,6 +1,7 @@
 from pydantic import BaseModel,EmailStr
 from typing import Optional, List
 from enum import Enum
+from datetime import datetime
 
 # Helps initial securing and guardrailing bad data without touching db
 
@@ -16,6 +17,7 @@ class UserResponse(BaseModel):
     id:int
     name:str
     email:EmailStr
+    created_at: datetime
 
     class Config:
         from_attributes=True

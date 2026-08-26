@@ -4,7 +4,7 @@ import models
 import schemas
 from database import get_db
 from oauth2 import get_current_user
-from typing import Annotated
+from typing import Annotated, List
 
 
 
@@ -53,7 +53,7 @@ def add_user_To_group(group_id: int, member: schemas.GroupMemberAdd, db:DbSessio
     return {"message": f"User '{user.name}' successfully added to group '{group.name}'"}
 
 
-@router.get("/{group_id}/members")
+@router.get("/{group_id}/members", response_model=List[schemas.UserResponse])
 def get_group_members(group_id:int, db:DbSession, current_user:CurrentUser):
     """Returns all members belonging to a group"""
     group = db.query(models.Group).filter(models.Group.id == group_id).first()
