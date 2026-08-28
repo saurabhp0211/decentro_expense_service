@@ -62,6 +62,13 @@ class ExpenseCreate(BaseModel):
     split_type:SplitType
     splits: List[SplitInput]
 
+class ExpenseSplitResponse(BaseModel):
+    user_id:int
+    amount_owed:float
+
+    class Config:
+        from_attributes=True
+
 class ExpenseResponse(BaseModel):
     id:int
     group_id:int
@@ -70,9 +77,14 @@ class ExpenseResponse(BaseModel):
     amount:float
     description:str
     split_type:SplitType
+    created_at:datetime
+
+    splits: List[ExpenseSplitResponse]=[]
 
     class Config:
         from_attributes=True
+
+
 
 
 class UserListResponse(BaseModel):

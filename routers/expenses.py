@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, List
 from fastapi import APIRouter, status, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 import models
@@ -6,6 +6,7 @@ import schemas
 from database import get_db
 from utils import simplify_debts
 from oauth2 import get_current_user
+
 
 
 router=APIRouter()
@@ -38,11 +39,21 @@ def create_expense(expense: schemas.ExpenseCreate, db: DbSession, current_user: 
 
     if expense.split_type == schemas.SplitType.EQUAL:
         split_count = len(expense.splits)
-        owed_amount = expense.amount / split_count
-        for split in expense.splits:
+        base_amount=round(expense.amount/split_count,2)
+
+        # calculating exactly how much is missing due to rounding
+        total_base=base_amount*split_count
+        remainder=round(expense.amount-total_base,2)
+
+        for i, split in enumerate(expense.splits):
             if split.user_id not in group_member_ids:
                 raise HTTPException(status_code=400, detail=f"User {split.user_id} is not in the group")
-            split.amount = owed_amount
+
+            split.amount=base_amount
+
+            if i==0:
+                split.amount+=remainder
+        
 
     elif expense.split_type == schemas.SplitType.EXACT:
         total_split = 0.0
@@ -97,7 +108,7 @@ def create_expense(expense: schemas.ExpenseCreate, db: DbSession, current_user: 
     db.refresh(db_expense)
     return db_expense
 
-@router.get("/groups/{group_id}/expenses", tags=["Expenses"])
+@router.get("/groups/{group_id}/expenses", response_model=List[schemas.ExpenseResponse], tags=["Expenses"])
 def get_Group_Expenses(group_id: int, 
                        db:DbSession,
                        current_user: CurrentUser,
@@ -155,13 +166,16 @@ def get_group_balances(group_id: int, db: DbSession, current_user: CurrentUser):
     return {"overall_balances": final_balances}
 
 
-@router.delete("/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Expenses"])
-def delete_expense(expense_id: int, db:DbSession, current_user: CurrentUser):
+@router.delete("/groups/{group_id}/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Expenses"])
+def delete_expense(group_id:int, expense_id: int, db:DbSession, current_user: CurrentUser):
     """Deletes an expense and automatically removes all associated splits."""
 
     expense=db.query(models.Expense).filter(models.Expense.id==expense_id).first()
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
+
+    if expense.group_id!=group_id:
+        raise HTTPException(status_code=404, detail="Expense not found in this group")
     
     # SECURITY 
     # Only the person who logged the expense or the person who paid it is allowed to delete it. 
