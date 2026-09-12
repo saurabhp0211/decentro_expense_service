@@ -47,6 +47,7 @@ class SplitType(str, Enum):
     EQUAL="EQUAL"
     EXACT="EXACT"
     PERCENT="PERCENT"
+    SETTLEMENT= "SETTLEMENT"
 
 class SplitInput(BaseModel):
     user_id:int
@@ -84,7 +85,13 @@ class ExpenseResponse(BaseModel):
     class Config:
         from_attributes=True
 
+class SettlementCreate(BaseModel):
+    receiver_id: int
+    amount: float
 
+    class Config:
+        from_attributes=True
+        
 
 
 class UserListResponse(BaseModel):

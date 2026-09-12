@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 from database import get_db
-from utils import simplify_debts
+from utils import simplify_debts, fetch_and_calculate_balances
 from oauth2 import get_current_user
 
 
@@ -108,6 +108,77 @@ def create_expense(expense: schemas.ExpenseCreate, db: DbSession, current_user: 
     db.refresh(db_expense)
     return db_expense
 
+
+@router.post("/groups/{group_id}/settlements", status_code=status.HTTP_201_CREATED,tags=["Expenses"])
+def create_settlement(
+    group_id: int,
+    settlement: schemas.SettlementCreate,
+    db:DbSession,
+    current_user: CurrentUser
+):
+    payer_id= current_user.id
+
+    # prevents settling with yourself
+    if payer_id==settlement.receiver_id:
+        raise HTTPException(status_code=400, detail="You cannot settle a debt with yourself")
+    
+
+    # validation-- Ensures receiver exists in the group
+    group=db.query(models.Group).filter(models.Group.id==group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    receiver_in_group=any(member.id==settlement.receiver_id for member in group.members)
+    if not receiver_in_group:
+        raise HTTPException(status_code=400, detail="Receiver is not a member of this group.") 
+
+
+    # new validation layer for the owed amount
+    current_balances=fetch_and_calculate_balances(group_id, db)
+
+    current_debt=0.0
+    for debt in current_balances:
+        if debt["borrower_id"]==payer_id and debt["payer_id"] == settlement.receiver_id:
+            current_debt=debt["amount"]
+            break
+
+    if current_debt<=0:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid transaction: You do not currently owe this user any money."
+        )
+
+    if settlement.amount>current_debt:
+        raise HTTPException(status_code=400,
+                            detail=f"Overpayment blocked: You only owe Rs{current_debt}. Please adjust the settlement amount." 
+                            )
+
+
+
+    db_settlement=models.Expense(
+        group_id=group_id,
+        created_by_id=payer_id,
+        payer_id=payer_id,
+        amount=settlement.amount,
+        description="Debt Settlement",
+        split_type= schemas.SplitType.SETTLEMENT
+    )
+
+    db.add(db_settlement)
+    db.flush()
+
+    db_split=models.ExpenseSplit(
+        expense_id=db_settlement.id,
+        user_id=settlement.receiver_id,
+        amount_owed=settlement.amount
+    )
+
+    db.add(db_split)
+    db.commit()
+    db.refresh(db_settlement)
+
+    return {"message": "Settlement processed successfully", "settlement_id": db_settlement.id}
+
 @router.get("/groups/{group_id}/expenses", response_model=List[schemas.ExpenseResponse], tags=["Expenses"])
 def get_Group_Expenses(group_id: int, 
                        db:DbSession,
@@ -140,29 +211,9 @@ def get_group_balances(group_id: int, db: DbSession, current_user: CurrentUser):
     if current_user not in group.members:
         raise HTTPException(status_code=403, detail="Not authorized to view balances")
     
-    expenses = db.query(models.Expense).filter(models.Expense.group_id == group_id).all()
-
-    raw_transactions = []
-    involved_user_ids = set()
-
-    for expense in expenses:
-        for split in expense.splits:
-            if split.user_id != expense.payer_id:
-                raw_transactions.append({
-                    "borrower_id": split.user_id,
-                    "payer_id": expense.payer_id,
-                    "amount": split.amount_owed
-                })
-                involved_user_ids.add(split.user_id)
-                involved_user_ids.add(expense.payer_id)
     
-    if not involved_user_ids:
-        return {"overall_balances": []}
-    
-    users = db.query(models.User).filter(models.User.id.in_(involved_user_ids)).all()
-    user_names = {user.id: user.name for user in users}
+    final_balances = fetch_and_calculate_balances(group_id, db)
 
-    final_balances = simplify_debts(raw_transactions, user_names)
     return {"overall_balances": final_balances}
 
 

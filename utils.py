@@ -1,4 +1,6 @@
 from collections import defaultdict
+from sqlalchemy.orm import Session
+import models
 
 def simplify_debts(raw_transactions, user_map):
     net_balances=defaultdict(float)
@@ -46,3 +48,29 @@ def simplify_debts(raw_transactions, user_map):
         if creditors[j][1] < 0.01: j+=1
 
     return simplified
+
+
+def fetch_and_calculate_balances(group_id: int, db:Session):
+    expenses= db.query(models.Expense).filter(models.Expense.group_id==group_id).all()
+
+    raw_transactions=[]
+    involved_user_ids=set()
+
+    for expense in expenses:
+        for split in expense.splits:
+            if split.user_id!=expense.payer_id:
+                raw_transactions.append({
+                    "borrower_id": split.user_id,
+                    "payer_id": expense.payer_id,
+                    "amount":split.amount_owed
+                })
+                involved_user_ids.add(split.user_id)
+                involved_user_ids.add(expense.payer_id)
+
+    if not involved_user_ids:
+        return []
+
+    users=db.query(models.User).filter(models.User.id.in_(involved_user_ids)).all()
+    user_names={user.id: user.name for user in users}
+
+    return simplify_debts(raw_transactions, user_names)
