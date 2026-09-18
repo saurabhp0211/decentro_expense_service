@@ -1,4 +1,4 @@
-from pydantic import BaseModel,EmailStr
+from pydantic import BaseModel,EmailStr, Field, field_validator
 from typing import Optional, List
 from enum import Enum
 from datetime import datetime
@@ -22,7 +22,12 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes=True
     
-
+# payments schema
+class RazorpayOrderResponse(BaseModel):
+    order_id:str
+    amount:int
+    currency:str
+    receiver_id:int
 
 # group schemas 
 class GroupCreate(BaseModel):
@@ -87,11 +92,18 @@ class ExpenseResponse(BaseModel):
 
 class SettlementCreate(BaseModel):
     receiver_id: int
-    amount: float
+    amount: float=Field(gt=0, description="Amount must be strictly greater than 0")
+
+    @field_validator('amount')
+    @classmethod
+    def check_decimal_places(cls, value: float)->float:
+        if round(value,2)!=value:
+            raise ValueError("Amount cannot have more than 2 decimal places")
+        return value
 
     class Config:
         from_attributes=True
-        
+
 
 
 class UserListResponse(BaseModel):

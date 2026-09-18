@@ -6,7 +6,7 @@ import schemas
 from database import get_db
 from utils import simplify_debts, fetch_and_calculate_balances
 from oauth2 import get_current_user
-
+from payments import razorpay_client
 
 
 router=APIRouter()
@@ -116,10 +116,10 @@ def create_settlement(
     db:DbSession,
     current_user: CurrentUser
 ):
-    payer_id= current_user.id
+    debtor_id= current_user.id
 
     # prevents settling with yourself
-    if payer_id==settlement.receiver_id:
+    if debtor_id==settlement.receiver_id:
         raise HTTPException(status_code=400, detail="You cannot settle a debt with yourself")
     
 
@@ -138,7 +138,7 @@ def create_settlement(
 
     current_debt=0.0
     for debt in current_balances:
-        if debt["borrower_id"]==payer_id and debt["payer_id"] == settlement.receiver_id:
+        if debt["borrower_id"]==debtor_id and debt["payer_id"] == settlement.receiver_id:
             current_debt=debt["amount"]
             break
 
@@ -157,8 +157,8 @@ def create_settlement(
 
     db_settlement=models.Expense(
         group_id=group_id,
-        created_by_id=payer_id,
-        payer_id=payer_id,
+        created_by_id=debtor_id,
+        payer_id=debtor_id,
         amount=settlement.amount,
         description="Debt Settlement",
         split_type= schemas.SplitType.SETTLEMENT
@@ -178,6 +178,77 @@ def create_settlement(
     db.refresh(db_settlement)
 
     return {"message": "Settlement processed successfully", "settlement_id": db_settlement.id}
+
+
+@router.post("/groups/{group_id}/settlements/razorpay-order", response_model=schemas.RazorpayOrderResponse,tags=["Payments"])
+def create_razorpay_order(
+    group_id: int,
+    settlement: schemas.SettlementCreate,
+    db:DbSession,
+    current_user: CurrentUser
+):
+    debtor_id= current_user.id
+
+    if debtor_id== settlement.receiver_id:
+        raise HTTPException(status_code=400, detail="You cannot settle a debt with yourself")
+
+    group=db.query(models.Group).filter(models.Group.id==group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+
+    receiver_in_group=any(member.id==settlement.receiver_id for member in group.members)
+    if not receiver_in_group:
+        raise HTTPException(status_code=400, detail="Receiver is not a member of this group.")
+
+
+    # strict owed amount validation
+    current_balances=fetch_and_calculate_balances(group_id, db)
+
+    current_debt=0.0
+    for debt in current_balances:
+        if debt["borrower_id"]==debtor_id and debt["payer_id"]==settlement.receiver_id:
+            current_debt=debt["amount"]
+            break
+
+    if current_debt<=0:
+        raise HTTPException(status_code=400, detail="Invalid transaction: You do not currently owe this user any money.")
+    if settlement.amount>current_debt:
+        raise HTTPException(status_code=400, detail=f"Overpayment blocked: You only owe Rs{current_debt}.")
+
+
+    # Creating the razorpay order .. razorpay expects amount in paise
+    amount_in_paise=int(settlement.amount*100)
+
+    order_data={
+        "amount": amount_in_paise,
+        "currency":"INR",
+        "receipt": f"receipt_grp{group_id}_{debtor_id}_to_{settlement.receiver_id}",
+        "notes":{
+            "group_id":group_id,
+            "debtor_id":debtor_id,
+            "receiver_id":settlement.receiver_id
+        }
+    }
+
+    try:
+        razorpay_order=razorpay_client.order.create(data=order_data)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to communicate with Razorpay: {str(e)}")
+
+
+    return {
+        "order_id":razorpay_order["id"],
+        "amount":razorpay_order["amount"],
+        "currency":razorpay_order["currency"],
+        "receiver_id":settlement.receiver_id
+    }
+
+
+
+
+    
 
 @router.get("/groups/{group_id}/expenses", response_model=List[schemas.ExpenseResponse], tags=["Expenses"])
 def get_Group_Expenses(group_id: int, 
