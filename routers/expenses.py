@@ -7,6 +7,8 @@ from database import get_db
 from utils import simplify_debts, fetch_and_calculate_balances
 from oauth2 import get_current_user
 from payments import razorpay_client
+import json
+from cache import redis_client
 
 
 router=APIRouter()
@@ -103,6 +105,8 @@ def create_expense(expense: schemas.ExpenseCreate, db: DbSession, current_user: 
             amount_owed=round(owed_amount, 2)
         )
         db.add(db_split)
+
+    redis_client.delete(f"group_{expense.group_id}_balances")
 
     db.commit()
     db.refresh(db_expense)
@@ -275,6 +279,14 @@ def get_Group_Expenses(group_id: int,
 
 @router.get("/groups/{group_id}/balances", tags=["Balances"])
 def get_group_balances(group_id: int, db: DbSession, current_user: CurrentUser):
+
+    cache_key= f"group_{group_id}_balances"
+
+    cached_balances=redis_client.get(cache_key)
+    if cached_balances:
+        print("Serving from Redis Cache!")
+        return json.loads(cached_balances)
+
     group = db.query(models.Group).filter(models.Group.id == group_id).first()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
@@ -284,6 +296,8 @@ def get_group_balances(group_id: int, db: DbSession, current_user: CurrentUser):
     
     
     final_balances = fetch_and_calculate_balances(group_id, db)
+
+    redis_client.setex(cache_key, 3600, json.dumps(final_balances))
 
     return {"overall_balances": final_balances}
 

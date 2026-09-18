@@ -2,6 +2,10 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 import models
 from database import engine
 from routers import users, groups, expenses, auth
@@ -11,6 +15,13 @@ from routers import users, groups, expenses, auth
 
 # to initialize the application
 app=FastAPI(title="Decentro Expense Sharing API")
+
+
+# initialize the rate limiter using the user's IP address
+limiter=Limiter(key_func=get_remote_address)
+app.state.limiter=limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 
 #global handler for database conflicts
