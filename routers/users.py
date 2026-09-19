@@ -5,6 +5,8 @@ import schemas
 from database import get_db
 from oauth2 import hash_password, get_current_user
 from typing import Annotated
+from limiter import limiter
+from starlette.requests import Request
 
 router= APIRouter(
     prefix="/users",
@@ -15,7 +17,8 @@ Current_User=Annotated[models.User, Depends(get_current_user)]
 
 
 @router.post("/", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
-def create_user(user: schemas.UserCreate, db:Session = Depends(get_db)):
+@limiter.limit("1/minute")
+def create_user(request:Request, user: schemas.UserCreate, db:Session = Depends(get_db)):
     """This will create a new user in the database."""
 
     existing_user=db.query(models.User).filter(models.User.email==user.email).first()
@@ -39,7 +42,8 @@ def create_user(user: schemas.UserCreate, db:Session = Depends(get_db)):
     return db_user
 
 @router.get("/me", response_model=schemas.UserResponse)
-def get_current_user_profile(current_user: Current_User):
+@limiter.limit("60/minute")
+def get_current_user_profile(request:Request, current_user: Current_User):
     """Returns the profile of the currently authenticated user.
        No database session required here because the authentication dependency already fetched the user. """
 

@@ -9,6 +9,8 @@ from oauth2 import get_current_user
 from payments import razorpay_client
 import json
 from cache import redis_client
+from limiter import limiter
+from starlette.requests import Request
 
 
 router=APIRouter()
@@ -18,7 +20,8 @@ DbSession = Annotated[Session, Depends(get_db)]
 
 
 @router.post("/expenses/", response_model=schemas.ExpenseResponse, status_code=status.HTTP_201_CREATED, tags=["Expenses"])
-def create_expense(expense: schemas.ExpenseCreate, db: DbSession, current_user: CurrentUser):
+@limiter.limit("6/minute")
+def create_expense(request:Request , expense: schemas.ExpenseCreate, db: DbSession, current_user: CurrentUser):
     if not expense.splits:
         raise HTTPException(status_code=400, detail="The 'splits' array cannot be empty.")
     if expense.amount <= 0:
@@ -114,7 +117,9 @@ def create_expense(expense: schemas.ExpenseCreate, db: DbSession, current_user: 
 
 
 @router.post("/groups/{group_id}/settlements", status_code=status.HTTP_201_CREATED,tags=["Expenses"])
+@limiter.limit("5/minute")
 def create_settlement(
+    request:Request,
     group_id: int,
     settlement: schemas.SettlementCreate,
     db:DbSession,
@@ -185,7 +190,9 @@ def create_settlement(
 
 
 @router.post("/groups/{group_id}/settlements/razorpay-order", response_model=schemas.RazorpayOrderResponse,tags=["Payments"])
+@limiter.limit("5/minute")
 def create_razorpay_order(
+    request:Request,
     group_id: int,
     settlement: schemas.SettlementCreate,
     db:DbSession,
@@ -255,7 +262,10 @@ def create_razorpay_order(
     
 
 @router.get("/groups/{group_id}/expenses", response_model=List[schemas.ExpenseResponse], tags=["Expenses"])
-def get_Group_Expenses(group_id: int, 
+@limiter.limit("60/minute")
+def get_Group_Expenses(
+                       request:Request,
+                       group_id: int, 
                        db:DbSession,
                        current_user: CurrentUser,
                        skip:int =Query(0, ge=0, description="Records to skip"),
@@ -278,7 +288,8 @@ def get_Group_Expenses(group_id: int,
 
 
 @router.get("/groups/{group_id}/balances", tags=["Balances"])
-def get_group_balances(group_id: int, db: DbSession, current_user: CurrentUser):
+@limiter.limit("60/minute")
+def get_group_balances(request:Request, group_id: int, db: DbSession, current_user: CurrentUser):
 
     cache_key= f"group_{group_id}_balances"
 
@@ -303,7 +314,8 @@ def get_group_balances(group_id: int, db: DbSession, current_user: CurrentUser):
 
 
 @router.delete("/groups/{group_id}/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Expenses"])
-def delete_expense(group_id:int, expense_id: int, db:DbSession, current_user: CurrentUser):
+@limiter.limit("5/minute")
+def delete_expense(request:Request, group_id:int, expense_id: int, db:DbSession, current_user: CurrentUser):
     """Deletes an expense and automatically removes all associated splits."""
 
     expense=db.query(models.Expense).filter(models.Expense.id==expense_id).first()

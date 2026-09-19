@@ -5,7 +5,8 @@ import schemas
 from database import get_db
 from oauth2 import get_current_user
 from typing import Annotated, List
-
+from limiter import limiter
+from starlette.requests import Request
 
 
 
@@ -19,7 +20,9 @@ DbSession=Annotated[Session, Depends(get_db)]
 
 
 @router.post("/", response_model=schemas.GroupResponse, status_code=status.HTTP_201_CREATED)
-def create_group(group: schemas.GroupCreate, 
+@limiter.limit("5/minute")
+def create_group(request:Request,
+                 group: schemas.GroupCreate, 
                  db:DbSession,
                  current_user: CurrentUser):
     """Creates a new expense sharing group"""
@@ -32,7 +35,8 @@ def create_group(group: schemas.GroupCreate,
 
 
 @router.post("/{group_id}/members")
-def add_user_To_group(group_id: int, member: schemas.GroupMemberAdd, db:DbSession, current_user:CurrentUser):
+@limiter.limit("15/minute")
+def add_user_To_group(request:Request , group_id: int, member: schemas.GroupMemberAdd, db:DbSession, current_user:CurrentUser):
     """Adds a user to an existing group"""
     group = db.query(models.Group).filter(models.Group.id == group_id).first()
     if not group:
@@ -54,7 +58,8 @@ def add_user_To_group(group_id: int, member: schemas.GroupMemberAdd, db:DbSessio
 
 
 @router.get("/{group_id}/members", response_model=List[schemas.UserResponse])
-def get_group_members(group_id:int, db:DbSession, current_user:CurrentUser):
+@limiter.limit("30/minute")
+def get_group_members(request:Request, group_id:int, db:DbSession, current_user:CurrentUser):
     """Returns all members belonging to a group"""
     group = db.query(models.Group).filter(models.Group.id == group_id).first()
     if not group:
@@ -67,7 +72,8 @@ def get_group_members(group_id:int, db:DbSession, current_user:CurrentUser):
 
 
 @router.get("/", response_model=schemas.GroupListresponse)
-def get_groups(
+@limiter.limit("20/minute")
+def get_groups( request:Request,
     current_user:CurrentUser,
     db: DbSession):
 
