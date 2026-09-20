@@ -5,7 +5,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # SQLALCHEMY_DATABASE_URL = "sqlite:///./expenses.db"
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:root@localhost:5432/decentro_expenses"
+SQLALCHEMY_DATABASE_URL = "postgresql://postgres:root@db:5432/equipay_db"
 
 engine=create_engine(SQLALCHEMY_DATABASE_URL)
 
