@@ -17,7 +17,7 @@ Current_User=Annotated[models.User, Depends(get_current_user)]
 
 
 @router.post("/", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
-@limiter.limit("1/minute")
+@limiter.limit("5/minute")
 def create_user(request:Request, user: schemas.UserCreate, db:Session = Depends(get_db)):
     """This will create a new user in the database."""
 

@@ -1,5 +1,6 @@
 from typing import Annotated, List
-from fastapi import APIRouter, status, Depends, HTTPException, Query
+import time
+from fastapi import APIRouter, status, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 import models
 import schemas
@@ -18,6 +19,10 @@ router=APIRouter()
 CurrentUser= Annotated[models.User, Depends(get_current_user)]
 DbSession = Annotated[Session, Depends(get_db)]
 
+
+def send_payment_notification(debtor_id:int, receiver_id:int, amount:float):
+    time.sleep(3)
+    print(f"\n [ASYNC WORKER] SUCCESS: Receipt sent! User {debtor_id} paid User {receiver_id} Rs {amount}\n", flush=True)
 
 @router.post("/expenses/", response_model=schemas.ExpenseResponse, status_code=status.HTTP_201_CREATED, tags=["Expenses"])
 @limiter.limit("6/minute")
@@ -123,7 +128,8 @@ def create_settlement(
     group_id: int,
     settlement: schemas.SettlementCreate,
     db:DbSession,
-    current_user: CurrentUser
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks
 ):
     debtor_id= current_user.id
 
@@ -185,6 +191,13 @@ def create_settlement(
     db.add(db_split)
     db.commit()
     db.refresh(db_settlement)
+
+    background_tasks.add_task(
+        send_payment_notification,
+        debtor_id,
+        settlement.receiver_id,
+        settlement.amount
+    )
 
     return {"message": "Settlement processed successfully", "settlement_id": db_settlement.id}
 
